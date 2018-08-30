@@ -25,6 +25,8 @@ Or, if you want to move them from just some of the drives (e.g. only drives C:, 
 
 Note that you cannot move SVI from the drive where your Windows is installed.
 
+And when you get the message "This program is ready to perform the operation. Press Enter to continue.", press Enter.
+
 4. Next, wait until you get the message "Done! Press Enter to quit.". After that, press Enter to close the app. Now you can turn on System Restore on your desired drives.
 
 5. Now, if you take a look at your source drives, you will see an item named "System Volume Information" which seems like a shortcut. But it's not actually a shortcut. It's called a *directory junction*. Don't worry, it doesn't take up even one byte on your disk. The actual and original SVI folder is stored in the destination drive.
