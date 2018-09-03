@@ -4,7 +4,8 @@ var wshShell = new ActiveXObject("WScript.Shell");
 //Run that again with cscript.exe
 checkScript();
 
-String.prototype.startsWith=new Function("str","return(this.substr(0,str.length) === str);");
+String.prototype.startsWith = new Function("str", "return(this.substr(0, str.length) === str);");
+var alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
 with (WScript)
 {
@@ -15,11 +16,20 @@ with (WScript)
 	StdOut.WriteLine("Please wait...");
 	
 	//Parse the driveLetters string and separate it by "->"
-	var destinationDrive = "";
+	var destinationFolder = "";
 	var offset = driveLetters.indexOf("->");
 	if (offset >= 0)
 	{
-		destinationDrive = driveLetters.charAt(offset + 2);
+		destinationFolder = driveLetters.substr(offset + 2);
+		if (FSO.DriveExists(destinationFolder))
+			destinationFolder = destinationFolder.charAt(0) + ":\\";
+		else if (!FSO.FolderExists(destinationFolder))
+		{
+			StdErr.WriteLine("Error: Could not find folder '" + destinationFolder + "'.");
+			StdOut.Write("Press Enter to quit.");
+			StdIn.SkipLine();
+			WScript.Quit();
+		}
 		driveLetters = driveLetters.substr(0, offset);
 	}
 	
@@ -28,7 +38,7 @@ with (WScript)
 	//letters of all drives.
 	
 	if (!driveLetters)
-		driveLetters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+		driveLetters = alphabet;
 	
 	//So far we have some raw drive letters stored in driveLetters
 	//variable. But we should notice some possible issues of the
@@ -38,24 +48,58 @@ with (WScript)
 	//   that does not exist.
 	//3. One of the drive letters might correspond to the Windows
 	//   drive.
+	//Also, the user might have prepended "!" to the drive letters.
+	//This means, all drives except these drive letters. So we
+	//should consider this.
 	//Thus, we define an another variable named sourceDrives and 
 	//store the acceptable drive letters in that.
 	
 	var sourceDrives = "";
 	var winDrv = FSO.GetSpecialFolder(0).Drive.DriveLetter.toUpperCase();
-	for (var i = 0;i < driveLetters.length;i++)
+	if (driveLetters.charAt(0) == "!")
 	{
-		//If the drive is the windows drive, ignore it.
-		if (driveLetters.charAt(i) == winDrv)
-			continue;
-		//If the drive letter is a duplicate, ignore it.
-		if (sourceDrives.indexOf(driveLetters.charAt(i)) >= 0)
-			continue;
-		//Then if the drive exists, add it to the sourceDrives
-		//variable as an acceptable drive.
-		if (FSO.DriveExists(driveLetters.charAt(i)))
-			sourceDrives += driveLetters.charAt(i);
+		//Check for drives other than the drive letters
+		//that the user has entered.
+		for (var i = 0;i < alphabet.length;i++)
+		{
+			var drv = alphabet.charAt(i);
+			if (!FSO.DriveExists(drv))
+				continue;
+			
+			//If it comes here, we have an existing drive
+			//whose letter is stored in drv variable. Now
+			//check if drv doesn't reside in driveLetters
+			//variable.
+			if (driveLetters.indexOf(drv) >= 0)
+				continue;
+			
+			//Check if drv is a hard disk drive
+			if (FSO.GetDrive(drv).DriveType != 2)
+				continue;
+			
+			//Check if drv isn't Windows drive.
+			if (drv == winDrv)
+				continue;
+			
+			//Add drv to the list of source drives.
+			sourceDrives += drv;
+		}
 	}
+	else
+		//Check for valid drives in driveLetters variable.
+		for (var i = 0;i < driveLetters.length;i++)
+		{
+			//If the drive is the windows drive, ignore it.
+			if (driveLetters.charAt(i) == winDrv)
+				continue;
+			//If the drive letter is a duplicate, ignore it.
+			if (sourceDrives.indexOf(driveLetters.charAt(i)) >= 0)
+				continue;
+			//Then if the drive exists, add it to the sourceDrives
+			//variable as an acceptable drive.
+			if (FSO.DriveExists(driveLetters.charAt(i)) && (FSO.GetDrive(driveLetters.charAt(i)).DriveType == 2))
+				sourceDrives += driveLetters.charAt(i);
+		}
 	
 	//Now we have some acceptable drive letters stored in 
 	//sourceDrives. Anyway, here an array named destinationPaths
@@ -64,10 +108,10 @@ with (WScript)
 	//folder in that drive must be moved to.
 	
 	var destinationPaths = [];
-	if (destinationDrive)
+	if (destinationFolder)
 	{
 		for (i = 0;i < sourceDrives.length;i++)
-			destinationPaths.push(destinationDrive + ":\\SVI on Volume " + sourceDrives.charAt(i));
+			destinationPaths.push(FSO.BuildPath(destinationFolder, "SVI on Volume " + sourceDrives.charAt(i)));
 	}
 	else
 		for (i = 0;i < sourceDrives.length;i++)
@@ -89,19 +133,26 @@ with (WScript)
 	{
 		//Variable to store the path of the SVI folder
 		//inside the source drive.
-		var $path = sourceDrives.charAt(i) + ":\\System Volume Information";
+		var sviPath = sourceDrives.charAt(i) + ":\\System Volume Information";
+		//If SVI folder does not exist in the source
+		//drive, display an error and discard that drive.
+		if (!FSO.FolderExists(sviPath))
+		{
+			StdErr.WriteLine("Error: Could not find " + sviPath);
+			continue;
+		}
 		//Write a token (e.g. Drive5) used for tracking progress.
 		ts.WriteLine("Echo Drive" + i);
 		//Take the ownership.
-		ts.WriteLine('takeown /f "' + $path + '" /a /r /d y');
+		ts.WriteLine('takeown /f "' + sviPath + '" /a /r /d y');
 		//Deal with permissions.
-		ts.WriteLine('icacls "' + $path + '" /t /c /grant administrators:F System:F everyone:F');
+		ts.WriteLine('icacls "' + sviPath + '" /t /c /grant administrators:F System:F everyone:F');
 		//Answer Y when prompted "Are you sure?"
 		ts.WriteLine("Y");
 		//Remove SVI folder.
-		ts.WriteLine('rmdir /s /q "' + $path + '"');
+		ts.WriteLine('rmdir /s /q "' + sviPath + '"');
 		//Replace it with a directory junction.
-		ts.WriteLine('mklink /J "' + $path + '" "' + destinationPaths[i] + '"');
+		ts.WriteLine('mklink /J "' + sviPath + '" "' + destinationPaths[i] + '"');
 	}
 	
 	ts.WriteLine("echo constructSVI");
@@ -140,4 +191,13 @@ with (WScript)
 	
 	//Delete the temporary bat file.
 	FSO.DeleteFile(batPath);
+}
+
+function checkScript()
+{
+	if (FSO.GetBaseName(WScript.FullName).toLowerCase() != "cscript")
+	{
+		wshShell.Run('cscript "' + WScript.ScriptFullName + '"');
+		WScript.Quit();
+	}
 }
