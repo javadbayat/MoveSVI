@@ -46,8 +46,6 @@ with (WScript)
 	//1. One of the drive letters might be mistakenly replicated.
 	//2. One of the drive letters might correspond to a drive 
 	//   that does not exist.
-	//3. One of the drive letters might correspond to the Windows
-	//   drive.
 	//Also, the user might have prepended "!" to the drive letters.
 	//This means, all drives except these drive letters. So we
 	//should consider this.
@@ -55,7 +53,6 @@ with (WScript)
 	//store the acceptable drive letters in that.
 	
 	var sourceDrives = "";
-	var winDrv = FSO.GetSpecialFolder(0).Drive.DriveLetter.toUpperCase();
 	if (driveLetters.charAt(0) == "!")
 	{
 		//Check for drives other than the drive letters
@@ -77,10 +74,6 @@ with (WScript)
 			if (FSO.GetDrive(drv).DriveType != 2)
 				continue;
 			
-			//Check if drv isn't Windows drive.
-			if (drv == winDrv)
-				continue;
-			
 			//Add drv to the list of source drives.
 			sourceDrives += drv;
 		}
@@ -89,9 +82,6 @@ with (WScript)
 		//Check for valid drives in driveLetters variable.
 		for (var i = 0;i < driveLetters.length;i++)
 		{
-			//If the drive is the windows drive, ignore it.
-			if (driveLetters.charAt(i) == winDrv)
-				continue;
 			//If the drive letter is a duplicate, ignore it.
 			if (sourceDrives.indexOf(driveLetters.charAt(i)) >= 0)
 				continue;
@@ -123,11 +113,13 @@ with (WScript)
 	
 	//Now, we reached the kernel of this program!
 	//Here we create a bat file in the temporary
-	//folder which carries out the command required
-	//to move the folder.
+	//folder which carries out the commands required
+	//to move the folders.
 	var tmpFolder = FSO.GetSpecialFolder(2);
 	var tmpBat = FSO.GetTempName().replace(".tmp", ".bat");
 	var ts = tmpFolder.CreateTextFile(tmpBat);
+	
+	var winDrv = FSO.GetSpecialFolder(0).Drive.DriveLetter.toUpperCase();
 	
 	for (i = 0;i < sourceDrives.length;i++)
 	{
@@ -143,6 +135,12 @@ with (WScript)
 		}
 		//Write a token (e.g. Drive5) used for tracking progress.
 		ts.WriteLine("Echo Drive" + i);
+		//If the source drive is the Windows drive, there
+		//is a file named SysCache.hve which is severely
+		//protected by Windows. So we should first disable
+		//discache.sys driver to bypass this protection.
+		if (sourceDrives.charAt(i) == winDrv)
+			ts.WriteLine("net stop discache");
 		//Take the ownership.
 		ts.WriteLine('takeown /f "' + sviPath + '" /a /r /d y');
 		//Deal with permissions.
@@ -153,6 +151,10 @@ with (WScript)
 		ts.WriteLine('rmdir /s /q "' + sviPath + '"');
 		//Replace it with a directory junction.
 		ts.WriteLine('mklink /J "' + sviPath + '" "' + destinationPaths[i] + '"');
+		//If the drive is Windows drive, we are now
+		//free to re-enable discache.sys
+		if (sourceDrives.charAt(i) == winDrv)
+			ts.WriteLine("net start discache");
 	}
 	
 	ts.WriteLine("echo constructSVI");
@@ -171,6 +173,8 @@ with (WScript)
 	StdOut.WriteLine("Press Enter to continue.");
 	StdIn.SkipLine();
 	
+	//Display a message
+	StdOut.WriteLine("Executing batch file '" + batPath + "'...");
 	//Execute the bat file and track the progress.
 	var bat = wshShell.Exec(batPath);
 	do
