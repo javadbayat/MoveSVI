@@ -145,8 +145,6 @@ with (WScript)
 		ts.WriteLine('takeown /f "' + sviPath + '" /a /r /d y');
 		//Deal with permissions.
 		ts.WriteLine('icacls "' + sviPath + '" /t /c /grant administrators:F System:F everyone:F');
-		//Answer Y when prompted "Are you sure?"
-		ts.WriteLine("Y");
 		//Remove SVI folder.
 		ts.WriteLine('rmdir /s /q "' + sviPath + '"');
 		//Replace it with a directory junction.
