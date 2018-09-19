@@ -9,9 +9,7 @@ var alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
 with (WScript)
 {
-	StdOut.WriteLine("Enter letters of the drives which you");
-	StdOut.WriteLine("want to move the folder from.");
-	StdOut.WriteLine("Example: CFGH");
+	StdOut.WriteLine("Enter your MoveSVI command:");
 	var driveLetters = StdIn.ReadLine().toUpperCase();
 	StdOut.WriteLine("Please wait...");
 	
